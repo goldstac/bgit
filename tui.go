@@ -9,8 +9,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
+	"github.com/mattn/go-runewidth"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -37,6 +39,14 @@ type procExitMsg struct {
 	err error
 }
 
+type tickMsg struct{}
+
+const spinnerFrames = "⣾⣽⣻⢿⡿⣟⣯⣷"
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
 type menuItem struct {
 	num  int
 	text string
@@ -56,6 +66,7 @@ type model struct {
 	exitInfo  string
 	width     int
 	height    int
+	spinner   int
 }
 
 type app struct {
@@ -195,8 +206,13 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.exitInfo = "exit 0"
 		}
 		m.status = "process exited"
+	case tickMsg:
+		m.spinner++
 	}
 	a.m = m
+	if m.status == "running" {
+		return a, tickCmd()
+	}
 	return a, nil
 }
 
@@ -217,7 +233,7 @@ func (a *app) handleKey(m model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input = ""
 			if m.stdin != nil {
 				fmt.Fprintf(m.stdin, "%s\n", text)
-				m.status = "sent: " + text
+				m.status = "running"
 			}
 		case "backspace":
 			r := []rune(m.input)
@@ -236,16 +252,22 @@ func (a *app) handleKey(m model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down":
 			m = m.moveSel(1)
 		default:
-			if msg.Type == tea.KeyRunes {
+			switch {
+			case msg.Type == tea.KeyRunes:
 				for _, r := range msg.Runes {
 					if unicode.IsDigit(r) {
 						m = m.selectItem(int(r - '0'))
 					}
 					m.input += string(r)
 				}
+			case msg.String() == " ":
+				m.input += " "
 			}
 		}
 		a.m = m
+		if m.status == "running" {
+			return a, tickCmd()
+		}
 		return a, nil
 	}
 	switch msg.String() {
@@ -271,6 +293,9 @@ func (a *app) handleKey(m model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.selectItem(int(msg.String()[0] - '0'))
 	}
 	a.m = m
+	if m.status == "running" {
+		return a, tickCmd()
+	}
 	return a, nil
 }
 
@@ -314,124 +339,158 @@ func (a *app) View() string {
 		h = 24
 	}
 
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 2).
-		Render("BGIT")
-	sub := m.status
-	if m.status == "process exited" {
-		sub += " (" + m.exitInfo + ")"
-	}
-	sub = lipgloss.NewStyle().Faint(true).Render(sub + " · " + m.bin)
-	header := lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", sub)
-
-	menu := m.menuView()
-	menu = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
+	header := lipgloss.NewStyle().
 		Padding(0, 1).
-		Width(w - 6).
-		Render(menu)
+		Render(lipgloss.JoinHorizontal(lipgloss.Left,
+			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("240")).Padding(0, 1).Render("BGIT"),
+			" ",
+			lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(headerStatus(m)),
+		))
+	rule := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", w))
 
-	inputRow := ""
+	menu := a.menuView(w)
+
+	parts := []string{header, rule, "", menu, ""}
+
 	if m.inputMode {
-		label := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("212")).
-			Render(m.inputLabel + ":")
-		field := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")).
-			Background(lipgloss.Color("236")).
-			Padding(0, 1).
-			Render(truncate(m.input+"█", w-12))
-		inputRow = lipgloss.JoinHorizontal(lipgloss.Left, label, " ", field)
+		parts = append(parts, promptRow(m, w), "")
 	}
 
-	logH := h - 12 - len(m.items)
-	if logH < 3 {
-		logH = 3
-	}
-	logPanel := a.logView(logH, w)
-
-	var footer string
-	if m.inputMode {
-		footer = "enter send · ↑/↓ pick · digits select · esc cancel · ctrl+c quit"
-	} else if m.stdin == nil {
-		footer = "r restart · q quit"
-	} else {
-		footer = "↑/↓ pick · digits select · q quit"
-	}
-	footer = lipgloss.NewStyle().Faint(true).Render(footer)
-
-	parts := []string{header, "", menu}
-	if inputRow != "" {
-		parts = append(parts, "", inputRow)
-	}
-	parts = append(parts, "", logPanel, "", footer)
+	parts = append(parts, a.logView(outLinesFor(m, h), w))
+	parts = append(parts, "", footerText(m))
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
-func (m model) menuView() string {
-	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("212")).
-		Render("Options") + "\n\n")
-	if len(m.items) == 0 {
-		b.WriteString(lipgloss.NewStyle().Faint(true).Render("waiting for program output…") + "\n")
+func outLinesFor(m model, h int) int {
+	rows := len(m.items)
+	if rows == 0 {
+		rows = 1
 	}
-	for i, it := range m.items {
-		cursor := "  "
-		if i == m.selected {
-			cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Render("▸")
-		}
-		num := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("81")).
-			Render(fmt.Sprintf("[%d]", it.num))
-		text := lipgloss.NewStyle().Padding(0, 1).Render(it.text)
-		if i == m.selected {
-			text = lipgloss.NewStyle().
-				Background(lipgloss.Color("63")).
-				Foreground(lipgloss.Color("15")).
-				Padding(0, 1).
-				Render(it.text)
-		}
-		b.WriteString(cursor + " " + num + " " + text + "\n")
+	used := 1 + 1 + 1 + 1 + rows + 1 + 1 + 1 + 1
+	if m.inputMode {
+		used += 2
 	}
-	return strings.TrimSuffix(b.String(), "\n")
+	n := h - used
+	if n < 2 {
+		n = 2
+	}
+	return n
 }
 
-func (a *app) logView(maxLines int, w int) string {
+func headerStatus(m model) string {
+	switch m.status {
+	case "running":
+		f := string(spinnerFrames[m.spinner%len(spinnerFrames)])
+		return fmt.Sprintf("running %s · %s", f, m.bin)
+	case "awaiting input":
+		return "awaiting input · " + m.bin
+	case "process exited":
+		return fmt.Sprintf("exited (%s) · %s", m.exitInfo, m.bin)
+	default:
+		return m.status + " · " + m.bin
+	}
+}
+
+func (a *app) menuView(w int) string {
+	if len(a.m.items) == 0 {
+		return lipgloss.NewStyle().
+			Faint(true).
+			Foreground(lipgloss.Color("238")).
+			Render("  waiting for program output…")
+	}
+	max := 0
+	for _, it := range a.m.items {
+		l := runewidth.StringWidth(fmt.Sprintf("[%d] %s", it.num, it.text))
+		if l > max {
+			max = l
+		}
+	}
+	if max > w-4 {
+		max = w - 4
+	}
 	var b strings.Builder
+	for i, it := range a.m.items {
+		label := fmt.Sprintf("[%d] %s", it.num, it.text)
+		label = truncate(label, max)
+		pad := max - runewidth.StringWidth(label)
+		label += strings.Repeat(" ", pad+2)
+		if i == a.m.selected {
+			b.WriteString(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("240")).
+				Render("▸ " + label))
+		} else {
+			b.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("245")).
+				Render("  " + label))
+		}
+		if i < len(a.m.items)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+func promptRow(m model, w int) string {
+	label := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Render(m.inputLabel + ":")
+	fieldW := w - runewidth.StringWidth(label) - 2
+	if fieldW < 10 {
+		fieldW = 10
+	}
+	disp := truncate(m.input+"█", fieldW)
+	disp += strings.Repeat(" ", fieldW-runewidth.StringWidth(disp))
+	field := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("237")).
+		Render(disp)
+	return lipgloss.JoinHorizontal(lipgloss.Left, label, " ", field)
+}
+
+func (a *app) logView(outLines int, w int) string {
+	ruleText := "─── output"
+	fill := w - runewidth.StringWidth(ruleText)
+	if fill < 0 {
+		fill = 0
+	}
+	rule := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).
+		Render(ruleText + strings.Repeat("─", fill))
+
+	var b strings.Builder
+	b.WriteString(rule + "\n")
 	if len(a.m.log) == 0 {
-		b.WriteString(lipgloss.NewStyle().Faint(true).Render("(no output yet)"))
+		b.WriteString(lipgloss.NewStyle().
+			Faint(true).
+			Foreground(lipgloss.Color("238")).
+			Render("  (no output yet)"))
 	} else {
-		start := len(a.m.log) - maxLines
+		start := len(a.m.log) - outLines
 		if start < 0 {
 			start = 0
 		}
 		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-		for _, l := range a.m.log[start:] {
-			b.WriteString(dim.Render(truncate(l, w-6)) + "\n")
+		for i := start; i < len(a.m.log); i++ {
+			b.WriteString("  " + dim.Render(truncate(a.m.log[i], w-2)) + "\n")
 		}
-		b.WriteString(lipgloss.NewStyle().
-			Faint(true).
-			Foreground(lipgloss.Color("238")).
-			Render(fmt.Sprintf("(%d lines, last %d shown)", len(a.m.log), len(a.m.log)-start)))
 	}
-	body := strings.TrimSuffix(b.String(), "\n")
-	if body == "" {
-		body = " "
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+func footerText(m model) string {
+	var t string
+	switch {
+	case m.inputMode:
+		t = "enter send · ↑/↓ pick · 1-9 select · esc cancel"
+	case m.stdin == nil:
+		t = "r restart · q quit"
+	default:
+		t = "↑/↓ pick · 1-9 select · q quit"
 	}
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("238")).
-		Padding(0, 1).
-		Width(w - 6).
-		Render(body)
+	return lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("238")).Render("  " + t)
 }
 
 func truncate(s string, w int) string {

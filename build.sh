@@ -1,0 +1,1 @@
+g++ -o bgit src/main.cpp

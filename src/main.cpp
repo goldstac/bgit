@@ -6,9 +6,11 @@ int main(){
 std::string input;
 std::string commit_msg = "update";
 std::string command = "";
+std::string custom_commit_message;
 std::cout << "Welcome To BGIT\n";
-std::cout << "Options\n";
+std::cout << "Option's\n";
 std::cout << "[1] Add,Commit,Push\n";
+std::cout << "[2] Add,Custom Commit Message,Push\n";
 std::cout << "Enter Your Choice --> ";
 std::getline(std::cin,input);
 std::cout << input;
@@ -22,15 +24,13 @@ if (input == "1"){
     std::system(command.c_str());
 }
 else if (input == "2"){
-
-}
-else if (input == "3"){
-
-}
-else if (input == "3"){
-
+std::cout << "Enter Commit Message\n -->";
+std::getline(std::cin,custom_commit_message);
+ss2 << "git add . && git commit -m \"" << custom_commit_message << "\" && git push";
+command = ss2.str();
+std::system(command.c_str());
 }
 else{
-    std::cout << "add a number\n";
+    std::cout << "add a number lol\n";
 }
 }

@@ -1,5 +1,5 @@
 # BGIT
-<img src="src/assets/images/logo.png" alt="logo" width="200" height"200">
+<img src="src/assets/images/logo.png" alt="logo" width="200" height"200px">
 
 A small git TUI. Write your logic in C++ (`src/main.cpp`), and a Go Bubble Tea TUI
 (`tui.go`) renders it as a clean, professional interface.

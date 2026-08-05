@@ -41,6 +41,12 @@ type procExitMsg struct {
 
 type tickMsg struct{}
 
+type versionMsg struct {
+	ver string
+}
+
+const appHandle = "goldstac/liproductions"
+
 const spinnerFrames = "⣾⣽⣻⢿⡿⣟⣯⣷"
 
 func tickCmd() tea.Cmd {
@@ -64,6 +70,7 @@ type model struct {
 	log       []string
 	status    string
 	exitInfo  string
+	version   string
 	width     int
 	height    int
 	spinner   int
@@ -140,9 +147,16 @@ func (a *app) consume(acc []byte) []byte {
 	return acc
 }
 
-var itemRe = regexp.MustCompile(`^\[(\d+)\]\s*(.*)$`)
+var (
+	itemRe    = regexp.MustCompile(`^\[(\d+)\]\s*(.*)$`)
+	versionRe = regexp.MustCompile(`^BGIT_VERSION[:\s]+(\S+)$`)
+)
 
 func (a *app) handleLine(line string) {
+	if mm := versionRe.FindStringSubmatch(line); mm != nil {
+		a.p.Send(versionMsg{ver: mm[1]})
+		return
+	}
 	if strings.Contains(line, "-->") {
 		label := strings.TrimSpace(strings.SplitN(line, "-->", 2)[0])
 		if label == "" {
@@ -192,6 +206,8 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input = ""
 		m.inputLabel = msg.label
 		m.status = "awaiting input"
+	case versionMsg:
+		m.version = msg.ver
 	case procInfoMsg:
 		m.cmd = msg.cmd
 		m.stdin = msg.stdin
@@ -339,14 +355,18 @@ func (a *app) View() string {
 		h = 24
 	}
 
-	header := lipgloss.NewStyle().
-		Padding(0, 1).
-		Render(lipgloss.JoinHorizontal(lipgloss.Left,
-			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("240")).Padding(0, 1).Render("BGIT"),
-			" ",
-			lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(headerStatus(m)),
-		))
+	title := "BGIT"
+	if m.version != "" {
+		title += " " + m.version
+	}
+	bar := lipgloss.JoinHorizontal(lipgloss.Left,
+		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("240")).Padding(0, 1).Render(title),
+		" ",
+		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).
+			Render(truncate(headerStatus(m)+" · "+appHandle, w-8)),
+	)
+	header := lipgloss.NewStyle().Padding(0, 1).Render(bar)
 	rule := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", w))
 
 	menu := a.menuView(w)

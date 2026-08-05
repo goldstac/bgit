@@ -2,18 +2,20 @@
 #include <string>
 #include <cstdlib>
 #include <sstream>
+const std::string BGIT_VERSION = "v1.0.0";
 int main(){
 std::string input;
 std::string commit_msg = "update";
 std::string command = "";
 std::string custom_commit_message;
+std::cout << "BGIT_VERSION " << BGIT_VERSION << "\n";
 std::cout << "Welcome To BGIT\n";
 std::cout << "Option's\n";
 std::cout << "[1] Add,Commit,Push\n";
 std::cout << "[2] Add,Custom Commit Message,Push\n";
 std::cout << "Enter Your Choice --> ";
 std::getline(std::cin,input);
-std::cout << input;
+std::cout << input << "\n";
 std::stringstream ss1;
 std::stringstream ss2;
 std::stringstream ss3;

@@ -25,6 +25,16 @@ go build -o bgit-tui tui.go
 The TUI spawns your compiled C++ binary and turns its output into menus, input fields,
 and streaming output. Edit C++ only — no Go changes needed.
 
+## Install from AUR
+
+```sh
+yay -S bgit
+bgit
+```
+
+After installing, `bgit` opens the TUI (the C++ logic runs as `bgit-core`). Also
+available from your desktop's app menu.
+
 ## Developer docs
 
 See [DEV.md](DEV.md) for the full developer docs: the C++ output conventions (`[N]`

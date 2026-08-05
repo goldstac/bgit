@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=BGIT
+GenericName=Git TUI
+Comment=A small git TUI - C++ logic rendered by a Go Bubble Tea interface
+Exec=bgit
+Icon=utilities-terminal
+Terminal=true
+Categories=Development;Utility;
+Keywords=git;tui;commit;push;

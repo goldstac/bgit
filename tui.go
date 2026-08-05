@@ -539,12 +539,27 @@ func truncate(s string, w int) string {
 	return string(r[:w-3]) + "..."
 }
 
-func main() {
-	bin := os.Getenv("BGIT_BIN")
-	if bin == "" {
-		bin = "./bgit"
+func resolveBin() string {
+	if b := os.Getenv("BGIT_BIN"); b != "" {
+		return b
 	}
-	a := &app{m: model{bin: bin, selected: -1}}
+	if _, err := os.Stat("./bgit-core"); err == nil {
+		return "./bgit-core"
+	}
+	if b, err := exec.LookPath("bgit-core"); err == nil {
+		return b
+	}
+	if _, err := os.Stat("./bgit"); err == nil {
+		return "./bgit"
+	}
+	if b, err := exec.LookPath("bgit"); err == nil {
+		return b
+	}
+	return "./bgit"
+}
+
+func main() {
+	a := &app{m: model{bin: resolveBin(), selected: -1}}
 	p := tea.NewProgram(a, tea.WithAltScreen())
 	a.p = p
 	if _, err := p.Run(); err != nil {

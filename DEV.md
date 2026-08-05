@@ -52,6 +52,10 @@ go build -o bgit-tui tui.go # compile the TUI
 - After changing `src/main.cpp`, you must recompile the C++ binary — the Go TUI always
   spawns it fresh on launch, so no Go rebuild is needed for C++ changes.
 
+- **Binary resolution**: the TUI looks for the C++ binary in this order — `BGIT_BIN` env
+  var, `./bgit-core` in the current dir, `bgit-core` from PATH, then `./bgit` / `bgit`.
+  When installed from the AUR, `bgit` is the TUI and `bgit-core` is the C++ logic.
+
 ## TUI Key Controls
 
 | Key                          | Action                                   |

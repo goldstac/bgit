@@ -1,4 +1,4 @@
-# BGIT
+# bgit
 <img src="src/assets/images/logo.png" alt="logo" width="200">
 
 A small git TUI. Write your logic in C++ (`src/main.cpp`), and a Go Bubble Tea TUI

@@ -26,7 +26,7 @@ go build -o bgit-tui tui.go
 The TUI spawns your compiled C++ binary and turns its output into menus, input fields,
 and streaming output. Edit C++ only — no Go changes needed.
 
-## Install from AUR
+## Install from AUR (not ready yet)
 
 ```sh
 yay -S bgit

@@ -33,6 +33,6 @@ command = ss2.str();
 std::system(command.c_str());
 }
 else{
-    std::cout << "add a number lol\n";
+    std::cerr << "add a number lol\n";
 }
 }

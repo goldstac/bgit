@@ -18,7 +18,8 @@ import (
 )
 
 type logLineMsg struct {
-	text string
+	text  string
+	isErr bool
 }
 
 type addItemMsg struct {
@@ -58,6 +59,11 @@ type menuItem struct {
 	text string
 }
 
+type logLine struct {
+	text  string
+	isErr bool
+}
+
 type model struct {
 	bin       string
 	cmd       *exec.Cmd
@@ -67,7 +73,7 @@ type model struct {
 	input     string
 	inputMode bool
 	inputLabel string
-	log       []string
+	log       []logLine
 	status    string
 	exitInfo  string
 	version   string
@@ -103,8 +109,8 @@ func (a *app) startCmd() tea.Cmd {
 		if err := cmd.Start(); err != nil {
 			return procExitMsg{err}
 		}
-		go a.stream(stdout)
-		go a.stream(stderr)
+		go a.stream(stdout, false)
+		go a.stream(stderr, true)
 		go func() {
 			a.p.Send(procExitMsg{err: cmd.Wait()})
 		}()
@@ -112,25 +118,25 @@ func (a *app) startCmd() tea.Cmd {
 	}
 }
 
-func (a *app) stream(r io.Reader) {
+func (a *app) stream(r io.Reader, isErr bool) {
 	buf := make([]byte, 4096)
 	acc := make([]byte, 0, 4096)
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
 			acc = append(acc, buf[:n]...)
-			acc = a.consume(acc)
+			acc = a.consume(acc, isErr)
 		}
 		if err != nil {
 			if len(acc) > 0 {
-				a.consume(acc)
+				a.consume(acc, isErr)
 			}
 			return
 		}
 	}
 }
 
-func (a *app) consume(acc []byte) []byte {
+func (a *app) consume(acc []byte, isErr bool) []byte {
 	for {
 		idx := bytes.IndexByte(acc, '\n')
 		if idx < 0 {
@@ -138,10 +144,10 @@ func (a *app) consume(acc []byte) []byte {
 		}
 		line := string(acc[:idx])
 		acc = acc[idx+1:]
-		a.handleLine(line)
+		a.handleLine(line, isErr)
 	}
 	if len(acc) > 0 && bytes.Contains(acc, []byte("-->")) {
-		a.handleLine(string(acc))
+		a.handleLine(string(acc), isErr)
 		acc = nil
 	}
 	return acc
@@ -152,7 +158,7 @@ var (
 	versionRe = regexp.MustCompile(`^BGIT_VERSION[:\s]+(\S+)$`)
 )
 
-func (a *app) handleLine(line string) {
+func (a *app) handleLine(line string, isErr bool) {
 	if mm := versionRe.FindStringSubmatch(line); mm != nil {
 		a.p.Send(versionMsg{ver: mm[1]})
 		return
@@ -170,7 +176,7 @@ func (a *app) handleLine(line string) {
 		a.p.Send(addItemMsg{num: num, text: strings.TrimSpace(mm[2])})
 		return
 	}
-	a.p.Send(logLineMsg{text: line})
+	a.p.Send(logLineMsg{text: line, isErr: isErr})
 }
 
 func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -181,7 +187,7 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return a.handleKey(m, msg)
 	case logLineMsg:
-		m.log = append(m.log, msg.text)
+		m.log = append(m.log, logLine{text: msg.text, isErr: msg.isErr})
 		if len(m.log) > 1000 {
 			m.log = m.log[len(m.log)-1000:]
 		}
@@ -493,8 +499,14 @@ func (a *app) logView(outLines int, w int) string {
 			start = 0
 		}
 		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("167"))
+		errTag := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("167")).Render("[!]")
 		for i := start; i < len(a.m.log); i++ {
-			b.WriteString("  " + dim.Render(truncate(a.m.log[i], w-2)) + "\n")
+			if a.m.log[i].isErr {
+				b.WriteString("  " + errStyle.Render(errTag+" "+truncate(a.m.log[i].text, w-7)) + "\n")
+			} else {
+				b.WriteString("  " + dim.Render(truncate(a.m.log[i].text, w-2)) + "\n")
+			}
 		}
 	}
 	return strings.TrimSuffix(b.String(), "\n")

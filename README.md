@@ -30,3 +30,7 @@ and streaming output. Edit C++ only — no Go changes needed.
 See [DEV.md](DEV.md) for the full developer docs: the C++ output conventions (`[N]`
 menu items, `-->` prompts, `BGIT_VERSION`, `std::cerr` errors), key controls, how the
 renderer works, and example code.
+
+## Attribution
+
+See [AI.md](AI.md) — the TUI was coded by AI, the core C++ logic by goldstac.

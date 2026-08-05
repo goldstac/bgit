@@ -1,3 +1,5 @@
 bgit
 bgit-tui
 test
+build.sh
+push.sh

@@ -1,0 +1,1 @@
+g++ -o bgit src/main.cpp && go build -o bgit-tui tui.go && ./bgit-tui

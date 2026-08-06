@@ -164,8 +164,13 @@ func (a *app) handleLine(line string, isErr bool) {
 		return
 	}
 	if strings.Contains(line, "-->") {
-		label := strings.TrimSpace(strings.SplitN(line, "-->", 2)[0])
-		if label == "" {
+		head := strings.SplitN(line, "-->", 2)[0]
+		if mm := itemRe.FindStringSubmatch(head); mm != nil {
+			num, _ := strconv.Atoi(mm[1])
+			a.p.Send(addItemMsg{num: num, text: strings.TrimSpace(mm[2])})
+		}
+		label := strings.TrimSpace(head)
+		if label == "" || strings.HasPrefix(label, "[") {
 			label = "Input"
 		}
 		a.p.Send(promptMsg{label: label})
